@@ -158,7 +158,8 @@ public:
 			 ceph_file_layout *dir_layout,
 			 set<SimpleLock*> rdlocks,
 			 set<SimpleLock*> wrlocks,
-			 set<SimpleLock*> xlocks);
+			 set<SimpleLock*> xlocks,
+			 bool retry = false);
   void handle_remove_vxattr(MDRequest *mdr, CInode *cur,
 			    set<SimpleLock*> rdlocks,
 			    set<SimpleLock*> wrlocks,

@@ -3532,7 +3532,7 @@ int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *lay
 	int64_t pool = mds->osdmap->lookup_pg_pool_name(value);
 	if (pool < 0) {
 	  dout(10) << " unknown pool " << value << dendl;
-	  return -EINVAL;
+	  return -ENOENT;
 	}
 	layout->fl_pg_pool = pool;
       }
@@ -3556,11 +3556,32 @@ int Server::parse_layout_vxattr(string name, string value, ceph_file_layout *lay
   return 0;
 }
 
+class C_MDS_Retry_set_vxattr : public Context {
+  Server *server;
+  MDRequest *mdr;
+  CInode *cur;
+  ceph_file_layout *dir_layout;
+  set<SimpleLock*> rdlocks;
+  set<SimpleLock*> wrlocks;
+  set<SimpleLock*> xlocks;
+public:
+  C_MDS_Retry_set_vxattr(
+    Server *s, MDRequest *m, CInode *c, ceph_file_layout *dl,
+    set<SimpleLock*> rdl, set<SimpleLock*> wrl, set<SimpleLock*> xl) :
+      server(s), mdr(m), cur(c), dir_layout(dl),
+      rdlocks(rdl), wrlocks(wrl), xlocks(xl) {}
+  void finish(int r) {
+    assert(0 == r);
+    server->handle_set_vxattr(mdr, cur, dir_layout, rdlocks, wrlocks, xlocks);
+  }
+};
+
 void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
 			       ceph_file_layout *dir_layout,
 			       set<SimpleLock*> rdlocks,
 			       set<SimpleLock*> wrlocks,
-			       set<SimpleLock*> xlocks)
+			       set<SimpleLock*> xlocks,
+			       bool retry)
 {
   MClientRequest *req = mdr->client_request;
   string name(req->get_path2());
@@ -3590,6 +3611,17 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
       rest = name.substr(name.find("layout"));
       int r = parse_layout_vxattr(rest, value, &dlayout->layout);
       if (r < 0) {
+	if (r == -ENOENT) {
+	  if (!retry) {
+	    // send request to get latest map, but don't wait if
+	    // we don't get anything newer than what we have
+	    mds->request_osdmap(
+		  new C_MDS_Retry_set_vxattr(this, mdr, cur, dir_layout,
+		    rdlocks, wrlocks, xlocks));
+	    return;
+	  }
+	  r = -EINVAL;
+	}
 	reply_request(mdr, r);
 	return;
       }
@@ -3609,6 +3641,17 @@ void Server::handle_set_vxattr(MDRequest *mdr, CInode *cur,
       rest = name.substr(name.find("layout"));
       int r = parse_layout_vxattr(rest, value, &layout);
       if (r < 0) {
+	if (r == -ENOENT) {
+	  if (!retry) {
+	    // send request to get latest map, but don't wait if
+	    // we don't get anything newer than what we have
+	    mds->request_osdmap(
+		  new C_MDS_Retry_set_vxattr(this, mdr, cur, dir_layout,
+		    rdlocks, wrlocks, xlocks));
+	    return;
+	  }
+	  r = -EINVAL;
+	}
 	reply_request(mdr, r);
 	return;
       }
