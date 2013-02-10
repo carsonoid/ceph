@@ -2620,6 +2620,10 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	  dout(10) << "tolerating EEXIST during journal replay on non-btrfs" << dendl;
 	  ok = true;
 	}
+	if (r == -ENOTEMPTY && op == Transaction::OP_RMCOLL) {
+	  dout(10) << "tolerating ENOTEMPTY during journal replay on non-btrfs" << dendl;
+	  ok = true;
+	}
 	if (r == -EEXIST && op == Transaction::OP_COLL_ADD) {
 	  dout(10) << "tolerating EEXIST during journal replay since btrfs_snap is not enabled" << dendl;
 	  ok = true;
