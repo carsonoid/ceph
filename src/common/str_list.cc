@@ -18,8 +18,21 @@
 
 using std::string;
 
-static bool get_next_token(const std::string &s, size_t& pos, string& token)
+static bool get_next_token(const std::string &s, size_t& pos, string ignore, string& token)
 {
+  string delims = ";,= \t";
+  const char *pos_delims[] = {";", ",", "=", " ", "\t", NULL};
+
+  if (!ignore.empty()) {
+    delims.clear();
+
+    for (const char **d = pos_delims; *d; ++d) {
+      size_t pos = ignore.find(*d);
+      if (pos == string::npos)
+         delims.append(*d);
+    }
+  }
+
   int start = s.find_first_not_of(" \t", pos);
   int end;
 
@@ -30,7 +43,7 @@ static bool get_next_token(const std::string &s, size_t& pos, string& token)
     end = start + 1;
     pos = end;
   } else {
-    end = s.find_first_of(";,= \t", start+1);
+    end = s.find_first_of(delims.c_str(), start+1);
     if (end >= 0)
       pos = end + 1;
   }
@@ -42,6 +55,25 @@ static bool get_next_token(const std::string &s, size_t& pos, string& token)
 
   token = s.substr(start, end - start);
   return true;
+
+}
+
+void get_str_list(const std::string& str, const char *ignore_,
+        std::list<std::string>& str_list)
+{
+  size_t pos = 0;
+  string token;
+  string ignore = ignore_;
+
+  str_list.clear();
+
+  while (pos < str.size()) {
+    if (get_next_token(str, pos, ignore, token)) {
+      if (token.size() > 0) {
+        str_list.push_back(token);
+      }
+    }
+  }
 }
 
 void get_str_list(const std::string& str, std::list<string>& str_list)
@@ -52,7 +84,7 @@ void get_str_list(const std::string& str, std::list<string>& str_list)
   str_list.clear();
 
   while (pos < str.size()) {
-    if (get_next_token(str, pos, token)) {
+    if (get_next_token(str, pos, "", token)) {
       if (token.size() > 0) {
         str_list.push_back(token);
       }
@@ -68,7 +100,7 @@ void get_str_set(const std::string& str, std::set<std::string>& str_set)
   str_set.clear();
 
   while (pos < str.size()) {
-    if (get_next_token(str, pos, token)) {
+    if (get_next_token(str, pos, "", token)) {
       if (token.size() > 0) {
         str_set.insert(token);
       }
